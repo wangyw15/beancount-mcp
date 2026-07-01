@@ -4,6 +4,7 @@ from mcp.server.fastmcp import FastMCP
 
 from _beancount import Beancount as BeancountUtil
 from config import load_config
+from util import parse_date
 
 config = load_config()
 
@@ -35,19 +36,11 @@ def get_balance(account: str, from_date: str = "", to_date: str = "") -> str:
 
     Args:
         account: The account to be calculated. Please use the name from get_accounts tool.
-        from_date: Optional. The beginning of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty stands for timestamp 0
-        to_date: Optional. The end of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty stands for today
+        from_date: Optional. The beginning of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty for timestamp 0
+        to_date: Optional. The end of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty for today
     """
-    _from = (
-        datetime.strptime(from_date, "%Y-%m-%d").date()
-        if from_date
-        else datetime.fromtimestamp(0).date()
-    )
-    _to = (
-        datetime.strptime(to_date, "%Y-%m-%d").date()
-        if to_date
-        else datetime.now().date()
-    )
+    _from = parse_date(from_date) if from_date else datetime.fromtimestamp(0).date()
+    _to = parse_date(to_date) if to_date else datetime.now().date()
 
     return bc.get_balance(account, _from, _to).to_string()
 
@@ -67,6 +60,31 @@ def add_transactions(transactions: str) -> str:
         return "Transactions added successfully"
 
     return str(errors)
+
+
+@mcp.tool()
+def get_entries(account: str = "", from_date: str = "", to_date: str = "") -> str:
+    """Get entries happened within the date range. Never call the tool with all the arguments set to default! It will return a large amount of data!
+
+    Args:
+        account: Optional. The account to be fetched. Please use the name from get_accounts tool, if the account is incorrect, the tool will return empty silently. Default: empty for all accounts
+        from_date: Optional. The beginning of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty for timestamp 0
+        to_date: Optional. The end of the date range. Format: YYYY-MM-DD (for example, 2026-07-01). Default: empty for today
+    """
+    if (not account) and (not from_date) and (not to_date):
+        return "DO NOT call the tool with all the arguments set to default! It will return a large amount of data!"
+
+    _from = parse_date(from_date) if from_date else datetime.fromtimestamp(0).date()
+    _to = parse_date(to_date) if to_date else datetime.now().date()
+
+    entries = bc.filter_entries(account, _from, _to)
+    return "\n".join([bc.printer(entry) for entry in entries]) if entries else "No data"
+
+
+@mcp.tool()
+def today() -> str:
+    """Get today's date, returns in format YYYY-MM-DD."""
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def main():

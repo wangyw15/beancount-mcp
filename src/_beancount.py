@@ -5,10 +5,15 @@ from typing import Any, cast
 from beancount import Inventory, RealAccount, loader
 from beancount.core import realization
 from beancount.core.data import (
+    Balance,
     BeancountError,
     Close,
     Directives,
+    Document,
+    Note,
     Open,
+    Pad,
+    Transaction,
 )
 from beancount.parser import parser, printer
 from dotenv import load_dotenv
@@ -25,6 +30,8 @@ class Beancount:
         self._errors: list[BeancountError] = []
         self._options: Any = None
 
+        self.printer = printer.EntryPrinter()
+
     def load(self):
         if not (self._entry_file.exists and self._entry_file.is_file()):
             raise ValueError(f"{self._entry_file} not found!")
@@ -39,13 +46,45 @@ class Beancount:
         for entry in self._entries:
             if isinstance(entry, (Open, Close)):
                 _entries.append(entry)
-            if entry.date >= _from and entry.date <= _to:
+            if _from <= entry.date and entry.date <= _to:
                 _entries.append(entry)
 
         real = realization.realize(_entries)
         print(real.items())
         _account: RealAccount = cast(RealAccount, realization.get(real, account))
         return _account.balance
+
+    def filter_entries(
+        self,
+        account: str = "",
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ):
+        _from = from_date or datetime.fromtimestamp(0).date()
+        _to = to_date or datetime.now().date()
+
+        entries: Directives = []
+        for entry in self._entries:
+            if not (_from <= entry.date and entry.date <= _to):
+                continue
+
+            keep_entry = True
+            if account:
+                if isinstance(entry, Transaction):
+                    account_match = False
+                    for posting in entry.postings:
+                        if posting.account == account:
+                            account_match = True
+                            break
+                    keep_entry = account_match
+                elif isinstance(entry, (Open, Close, Pad, Balance, Note, Document)):
+                    if entry.account != account:
+                        keep_entry = False
+
+            if keep_entry:
+                entries.append(entry)
+
+        return entries
 
     def validate(self, transactions: str) -> bool:
         _, errors, _ = parser.parse_string(transactions)
@@ -59,8 +98,7 @@ class Beancount:
         with self._write_file.open(
             "a" if self._write_file.exists() else "w", encoding="utf-8"
         ) as f:
-            for item in directives:
-                printer.print_entry(item, file=f)
+            f.write("\n".join([self.printer(directive) for directive in directives]))
 
         f.close()
         return []
