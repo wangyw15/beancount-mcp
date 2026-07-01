@@ -4,15 +4,22 @@ from typing import Any, cast
 
 from beancount import Inventory, RealAccount, loader
 from beancount.core import realization
-from beancount.core.data import BeancountError, Close, Directives, Open
+from beancount.core.data import (
+    BeancountError,
+    Close,
+    Directives,
+    Open,
+)
+from beancount.parser import parser, printer
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
 class Beancount:
-    def __init__(self, entry_file: str) -> None:
+    def __init__(self, entry_file: str, write_file: str = "") -> None:
         self._entry_file = Path(entry_file)
+        self._write_file = Path(write_file or self._entry_file)
 
         self._entries: Directives = []
         self._errors: list[BeancountError] = []
@@ -39,6 +46,24 @@ class Beancount:
         print(real.items())
         _account: RealAccount = cast(RealAccount, realization.get(real, account))
         return _account.balance
+
+    def validate(self, transactions: str) -> bool:
+        _, errors, _ = parser.parse_string(transactions)
+        return len(errors) == 0
+
+    def add_transactions(self, transactions: str) -> list[BeancountError]:
+        directives, errors, _ = parser.parse_string(transactions)
+        if len(errors) > 0:
+            return errors
+
+        with self._write_file.open(
+            "a" if self._write_file.exists() else "w", encoding="utf-8"
+        ) as f:
+            for item in directives:
+                printer.print_entry(item, file=f)
+
+        f.close()
+        return []
 
     @property
     def accounts(self) -> list[str]:

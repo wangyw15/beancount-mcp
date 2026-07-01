@@ -8,7 +8,7 @@ from config import load_config
 config = load_config()
 
 mcp = FastMCP("beancount")
-bc = BeancountUtil(config["entry_file"])
+bc = BeancountUtil(config["entry_file"], config["write_file"])
 
 
 @mcp.tool()
@@ -50,6 +50,23 @@ def get_balance(account: str, from_date: str = "", to_date: str = "") -> str:
     )
 
     return bc.get_balance(account, _from, _to).to_string()
+
+
+@mcp.tool()
+def add_transactions(transactions: str) -> str:
+    """Add transaction to the Beancount ledger. If there's syntax error with the transction, the tool will report the errors and stops writing.
+
+    Args:
+        transacionts: Transctions in Beancount format string.
+    """
+    if config["read_only"]:
+        return "User has configured the MCP as read only, unable to write transactions"
+
+    errors = bc.add_transactions(transactions)
+    if len(errors) == 0:
+        return "Transactions added successfully"
+
+    return str(errors)
 
 
 def main():
